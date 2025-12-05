@@ -2,12 +2,10 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 
 # ==============================================================================
-# 1. MODELO DEPARTAMENTO (Basado en tu tabla 'departamentos')
+# 1. MODELO DEPARTAMENTO (Tabla 'departamentos')
 # ==============================================================================
 class Departamento(models.Model):
-    # En tu tabla es 'id_departamento', pero Django usa 'id' automático por defecto.
-    # Mapeamos los campos exactos de tu imagen:
-    numero = models.CharField(max_length=20, unique=True)  # Ej: "101-A"
+    numero = models.CharField(max_length=20, unique=True)
     torre = models.CharField(max_length=50, null=True, blank=True)
     condominio = models.CharField(max_length=100, default="Principal")
     piso = models.IntegerField(null=True, blank=True)
@@ -16,124 +14,123 @@ class Departamento(models.Model):
         return f"Depto {self.numero} (Torre {self.torre})"
 
     class Meta:
+        # IMPORTANTE: Si tu tabla en MySQL se llama 'departamentos', pon esto:
+        db_table = 'departamentos'  
         verbose_name = "Departamento"
         verbose_name_plural = "Departamentos"
 
 
 # ==============================================================================
-# 2. MODELO USUARIO PERSONALIZADO (Basado en tu tabla 'usuarios')
+# 2. MODELO USUARIO (Tabla 'usuarios')
 # ==============================================================================
-# Heredamos de AbstractUser para tener login, JWT y tokens automáticos.
 class Usuario(AbstractUser):
-    ROLES = (
-        ('admin', 'Administrador'),
-        ('operador', 'Operador'),
-    )
-    ESTADOS = (
-        ('activo', 'Activo'),
-        ('inactivo', 'Inactivo'),
-    )
+    # --- A. Reemplazo de campos de Django por los tuyos ---
+    
+    # 1. NOMBRES Y APELLIDOS
+    first_name = None  # Borramos el de Django
+    last_name = None   # Borramos el de Django
+    nombres = models.CharField(max_length=100, verbose_name="Nombres")
+    apellidos = models.CharField(max_length=100, verbose_name="Apellidos")
 
-    # Campos extra que pide tu tabla 'usuarios' y no trae Django por defecto:
+    # 2. EMAIL (El truco maestro)
+    # Llamamos a la variable 'email' (para que Django Auth funcione feliz),
+    # pero le decimos que lea la columna 'correo' de tu base de datos.
+    email = models.EmailField(unique=True, db_column='correo', verbose_name="Correo") 
+
+    # 3. FECHA CREACIÓN
+    # Django usa 'date_joined'. Hacemos que apunte a tu columna 'fecha_creacion'.
+    date_joined = models.DateTimeField(auto_now_add=True, db_column='fecha_creacion')
+
+    # --- B. Campos propios de tu tabla ---
     rut = models.CharField(max_length=15, null=True, blank=True, unique=True)
     telefono = models.CharField(max_length=25, null=True, blank=True)
     
-    # 'rol' y 'estado' son ENUMs en tu BD
+    ROLES = (('admin', 'Administrador'), ('operador', 'Operador'))
     rol = models.CharField(max_length=20, choices=ROLES, default='operador')
+    
+    ESTADOS = (('activo', 'Activo'), ('inactivo', 'Inactivo'))
     estado = models.CharField(max_length=20, choices=ESTADOS, default='activo')
     
-    # Relación con Departamento (Clave foránea 'id_departamento')
+    # FK apuntando a la columna 'id_departamento'
     departamento = models.ForeignKey(
         Departamento, 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True,
+        db_column='id_departamento', 
         related_name='habitantes'
     )
     
-    # Campos para recuperación de contraseña (según tu imagen)
     codigo_verificacion = models.CharField(max_length=10, null=True, blank=True)
     fecha_codigo = models.DateTimeField(null=True, blank=True)
 
-    # Django ya trae: first_name (nombres), last_name (apellidos), email, password, date_joined (fecha_creacion)
-    
+    # --- C. Configuración de Login ---
+    USERNAME_FIELD = 'username' 
+    REQUIRED_FIELDS = ['email', 'nombres', 'apellidos'] # Usamos 'email' aquí también
+
     def __str__(self):
         return f"{self.username} ({self.rol})"
 
+    class Meta:
+        db_table = 'usuarios' # Tu tabla existente
+
 
 # ==============================================================================
-# 3. MODELO SENSOR / RFID (Basado en tu tabla 'sensores')
+# 3. MODELO SENSOR (Tabla 'sensores')
 # ==============================================================================
 class Sensor(models.Model):
     ESTADOS_SENSOR = (
-        ('activo', 'Activo'),
-        ('inactivo', 'Inactivo'),
-        ('perdido', 'Perdido'),
-        ('bloqueado', 'Bloqueado'),
+        ('activo', 'Activo'), ('inactivo', 'Inactivo'),
+        ('perdido', 'Perdido'), ('bloqueado', 'Bloqueado'),
     )
-    TIPOS_SENSOR = (
-        ('llavero', 'Llavero'),
-        ('tarjeta', 'Tarjeta'),
-    )
+    TIPOS_SENSOR = (('llavero', 'Llavero'), ('tarjeta', 'Tarjeta'))
 
-    codigo_sensor = models.CharField(max_length=50, unique=True) # UID RFID
+    codigo_sensor = models.CharField(max_length=50, unique=True)
     estado = models.CharField(max_length=20, choices=ESTADOS_SENSOR, default='activo')
     tipo = models.CharField(max_length=20, choices=TIPOS_SENSOR, default='llavero')
     
-    # Relaciones
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, null=True, blank=True, related_name='sensores')
+    # Si en sensores la columna es 'id_departamento', agrega db_column='id_departamento' aquí abajo
     departamento = models.ForeignKey(Departamento, on_delete=models.SET_NULL, null=True, blank=True)
 
-    # Fechas de control
-    fecha_alta = models.DateTimeField(auto_now_add=True) # Se llena solo al crear
+    fecha_alta = models.DateTimeField(auto_now_add=True)
     fecha_baja = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.codigo_sensor} - {self.estado}"
 
     class Meta:
+        db_table = 'sensores' # Aseguramos que lea la tabla correcta
         verbose_name = "Sensor RFID"
-        verbose_name_plural = "Sensores RFID"
 
 
 # ==============================================================================
-# 4. MODELO HISTORIAL DE ACCESO (Basado en tu tabla 'eventos_acceso')
+# 4. MODELO EVENTO (Tabla 'eventos_acceso' o similar)
 # ==============================================================================
 class Evento(models.Model):
-    TIPOS_EVENTO = (
-        ('ACCESO_VALIDO', 'Acceso Válido'),
-        ('ACCESO_RECHAZADO', 'Acceso Rechazado'),
-        ('APERTURA_MANUAL', 'Apertura Manual'),
-    )
+    TIPOS_EVENTO = (('ACCESO_VALIDO', 'Acceso Válido'), ('ACCESO_RECHAZADO', 'Acceso Rechazado'), ('APERTURA_MANUAL', 'Apertura Manual'))
 
-    # Relaciones opcionales (porque puede ser un sensor desconocido)
     sensor = models.ForeignKey(Sensor, on_delete=models.SET_NULL, null=True, blank=True)
     usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True)
     
     tipo_evento = models.CharField(max_length=50, choices=TIPOS_EVENTO)
-    resultado = models.CharField(max_length=50) # Ej: PERMITIDO, SENSOR_BLOQUEADO
+    resultado = models.CharField(max_length=50)
     fecha_hora = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"{self.fecha_hora} - {self.resultado}"
-
     class Meta:
-        ordering = ['-fecha_hora'] # Ordenar del más reciente al más antiguo
+        db_table = 'eventos_acceso' # Ajusta si tu tabla se llama diferente
+        ordering = ['-fecha_hora']
 
 
 # ==============================================================================
-# 5. MODELO COMANDOS REMOTOS (Basado en tu tabla 'comandos_remotos')
+# 5. MODELO COMANDO (Tabla 'comandos_remotos')
 # ==============================================================================
 class ComandoRemoto(models.Model):
-    COMANDOS = (
-        ('ABRIR', 'ABRIR'),
-        ('CERRAR', 'CERRAR'),
-        ('NINGUNO', 'NINGUNO'),
-    )
+    COMANDOS = (('ABRIR', 'ABRIR'), ('CERRAR', 'CERRAR'), ('NINGUNO', 'NINGUNO'))
 
     dispositivo_id = models.CharField(max_length=50, default="BARRERA_PRINCIPAL")
     comando = models.CharField(max_length=20, choices=COMANDOS, default='NINGUNO')
-    fecha_actualizacion = models.DateTimeField(auto_now=True) # Se actualiza cada vez que guardas
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return f"{self.dispositivo_id}: {self.comando}"
+    class Meta:
+        db_table = 'comandos_remotos' # Ajusta nombre
