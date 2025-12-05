@@ -12,7 +12,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
         # Listamos los campos que queremos ver en el JSON
-        fields = ['id', 'username', 'password', 'nombres', 'apellidos', 'email', 'rut', 'rol', 'estado', 'departamento']
+        fields = '__all__' #['id', 'username', 'password', 'email', 'rut', 'rol', 'estado', 'departamento']
         
         # SEGURIDAD: Configuración para que la contraseña se pueda escribir (POST) pero NO leer (GET)
         extra_kwargs = {'password': {'write_only': True}}

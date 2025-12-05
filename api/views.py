@@ -49,10 +49,10 @@ class InfoView(APIView):
 
     def get(self, request):
         data = {
-            "autor": ["Catalina Arancibia"],
+            "autor": ["Catalina Arancibia y Taís Cruz"],
             "asignatura": "Programación Back End",
             "proyecto": "Smart Barrier IoT",
-            "descripcion": "Sistema de control de acceso vehicular con RFID y App Móvil",
+            "descripcion": "Sistema de control de acceso de barrera con RFID y App Móvil",
             "version": "1.0"
         }
         return Response(data, status=status.HTTP_200_OK)
