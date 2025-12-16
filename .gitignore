@@ -1,4 +1,42 @@
-venv/
+# ========================
+# SEGURIDAD (¡MUY IMPORTANTE!)
+# ========================
+.env
+.env.local
+mis_claves.txt
+
+# ========================
+# PYTHON (Basura compilada)
+# ========================
 __pycache__/
+*.py[cod]
+*$py.class
+
+# ========================
+# DJANGO
+# ========================
+*.log
+local_settings.py
 db.sqlite3
+db.sqlite3-journal
+
+# ========================
+# ENTORNOS VIRTUALES
+# ========================
+venv/
+env/
+.venv/
+.env/
+
+# ========================
+# IDEs (Configuraciones de tu editor)
+# ========================
+.vscode/
+.idea/
+*.swp
+
+# ========================
+# SISTEMA OPERATIVO
+# ========================
 .DS_Store
+Thumbs.db
