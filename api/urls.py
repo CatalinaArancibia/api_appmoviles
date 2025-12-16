@@ -1,7 +1,11 @@
 from django.urls import path, include
 from rest_framework import routers
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
-# Importamos tus nuevas vistas
+# Importamos tus vistas
 from .views import (
     health, 
     InfoView, 
@@ -9,10 +13,11 @@ from .views import (
     DepartamentoViewSet, 
     SensorViewSet, 
     EventoViewSet, 
-    ComandoRemotoViewSet
+    ComandoRemotoViewSet,
+    simular_acceso  
 )
 
-# Configuración del Router Automático (Crea las rutas GET, POST, PUT, DELETE solas)
+# Configuración del Router
 router = routers.DefaultRouter()
 router.register(r'usuarios', UsuarioViewSet)
 router.register(r'departamentos', DepartamentoViewSet)
@@ -21,13 +26,17 @@ router.register(r'eventos', EventoViewSet)
 router.register(r'comandos', ComandoRemotoViewSet)
 
 urlpatterns = [
-    # Endpoint simple de salud
+    # 1. Rutas para el Login (JWT) <-- ¡ESTO FALTABA!
+    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
+    # 2. Rutas manuales
     path('health/', health, name='health'),
-    
-    # Endpoint requerido por el profe (/api/info/)
-    # Nota: Como InfoView ahora es una Clase (APIView), usamos .as_view()
     path('info/', InfoView.as_view(), name='info'),
     
-    # Incluimos todas las rutas del router
+    # 3. Ruta para la simulación de acceso (El Cerebro)
+    path('simular-acceso/', simular_acceso, name='simular_acceso'),
+    
+    # 4. Rutas automáticas del router (CRUDs)
     path('', include(router.urls)),
 ]
