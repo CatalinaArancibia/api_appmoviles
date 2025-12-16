@@ -18,31 +18,42 @@ from .serializers import (
 )
 
 # ==============================================================================
-# 1. PERMISOS PERSONALIZADOS (ADMIN vs OPERADOR) -> Cumple punto 7 Rúbrica
+# 1. PERMISOS PERSONALIZADOS (ADMIN vs OPERADOR) - VERSIÓN ESTRICTA
 # ==============================================================================
 class IsAdminOrReadOnly(permissions.BasePermission):
     """
-    Permiso personalizado:
+    Permiso estricto:
     - Admin: Puede hacer TODO (Crear, Leer, Actualizar, Borrar).
     - Operador/Usuario: Solo puede LEER (GET).
     """
     def has_permission(self, request, view):
-        # Si el usuario no está autenticado, denegar siempre
+        # 1. Si el usuario no está autenticado, denegar siempre
         if not request.user or not request.user.is_authenticated:
+            print(f"DEBUG: Usuario no autenticado")
             return False
 
-        # Si es una petición segura (GET, HEAD, OPTIONS), permitir a cualquiera autenticado
+        # 2. Si es una petición segura (GET, HEAD, OPTIONS), permitir a cualquiera autenticado
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # Para escribir (POST, PUT, DELETE), solo permitir si es ADMIN
-        return request.user.rol == 'admin' or request.user.is_superuser
+        # 3. DEBUG: Imprimimos en la consola de AWS quién está intentando escribir
+        user_rol = getattr(request.user, 'rol', 'SIN_ROL')
+        print(f"DEBUG: Intento de escritura por Usuario: {request.user.username}, Rol: {user_rol}, Superuser: {request.user.is_superuser}")
+
+        # 4. Para escribir (POST, PUT, DELETE), validamos ESTRICTAMENTE
+        if request.user.is_superuser:
+            return True
+            
+        if str(user_rol) == 'admin':
+            return True
+            
+        # Si llega aquí, es operador intentando escribir -> DENEGAR
+        return False
 
 
 # ==============================================================================
-# 2. MANEJADORES DE ERROR GLOBALES (404 Rutas y 500) -> Cumple punto 9 Rúbrica
+# 2. MANEJADORES DE ERROR GLOBALES
 # ==============================================================================
-# Estos se activan desde ecoapi/urls.py
 def error_404_handler(request, exception=None):
     return JsonResponse({
         "error": "Ruta no encontrada",
@@ -67,10 +78,10 @@ def health(request):
     return JsonResponse({"status": "ok", "server": "django-iot-smartconnect"})
 
 class InfoView(APIView):
-    permission_classes = [] # Público para cumplir rúbrica
+    permission_classes = [] # Público
     def get(self, request):
         data = {
-            "autor": ["Tu Nombre Aquí"],
+            "autor": ["Estudiante INACAP"],
             "asignatura": "Programación Back End",
             "proyecto": "Smart Barrier IoT",
             "descripcion": "Sistema de control de acceso vehicular",
@@ -82,27 +93,36 @@ class InfoView(APIView):
 # ==============================================================================
 # 4. VIEWSETS (CRUDs Completos)
 # ==============================================================================
+
 class DepartamentoViewSet(viewsets.ModelViewSet):
     queryset = Departamento.objects.all()
     serializer_class = DepartamentoSerializer
-    permission_classes = [IsAdminOrReadOnly] # Solo admin edita
+    permission_classes = [IsAdminOrReadOnly] 
 
 class UsuarioViewSet(viewsets.ModelViewSet):
     queryset = Usuario.objects.all()
     serializer_class = UsuarioSerializer
-    permission_classes = [IsAdminOrReadOnly] # Solo admin edita
+    permission_classes = [IsAdminOrReadOnly] 
+
+    # PROTECCIÓN ADICIONAL MANUAL: Por si el permiso fallara
+    def create(self, request, *args, **kwargs):
+        if str(request.user.rol) != 'admin' and not request.user.is_superuser:
+            return Response(
+                {"detail": "Acción denegada. Solo los administradores pueden crear usuarios."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
 
 class SensorViewSet(viewsets.ModelViewSet):
     queryset = Sensor.objects.all()
     serializer_class = SensorSerializer
-    permission_classes = [IsAdminOrReadOnly] # Solo admin edita
+    permission_classes = [IsAdminOrReadOnly] 
 
 class EventoViewSet(viewsets.ModelViewSet):
     queryset = Evento.objects.all()
     serializer_class = EventoSerializer
-    # Aquí cambiamos un poco: Nadie debería editar el historial, solo leer y crear
     permission_classes = [IsAuthenticated] 
-    http_method_names = ['get', 'post', 'head'] # Bloqueamos PUT y DELETE para proteger historial
+    http_method_names = ['get', 'post', 'head'] 
 
 class ComandoRemotoViewSet(viewsets.ModelViewSet):
     queryset = ComandoRemoto.objects.all()
@@ -111,18 +131,13 @@ class ComandoRemotoViewSet(viewsets.ModelViewSet):
 
 
 # ==============================================================================
-# 5. SIMULACIÓN DE ACCESO (Lógica de Negocio)
+# 5. SIMULACIÓN DE ACCESO
 # ==============================================================================
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def simular_acceso(request):
-    """
-    Simula el paso de una tarjeta RFID.
-    Maneja errores 400 (Validación), 404 (Objeto no encontrado) y 403 (Lógica negocio).
-    """
     codigo = request.data.get('codigo_sensor')
     
-    # Error 400: Validación
     if not codigo:
         return Response({
             "error": "Solicitud Incorrecta",
@@ -133,19 +148,16 @@ def simular_acceso(request):
     try:
         sensor = Sensor.objects.get(codigo_sensor=codigo)
     except Sensor.DoesNotExist:
-        # Registramos el intento fallido
         Evento.objects.create(
             tipo_evento='ACCESO_RECHAZADO', 
             resultado='SENSOR_NO_ENCONTRADO'
         )
-        # Error 404: Objeto no encontrado (lógica de negocio)
         return Response({
             "error": "No Encontrado",
             "codigo": 404,
             "mensaje": "Sensor no registrado en el sistema"
         }, status=404)
 
-    # Lógica de validación de estado
     if sensor.estado == 'activo':
         Evento.objects.create(
             sensor=sensor, 
@@ -165,7 +177,6 @@ def simular_acceso(request):
             tipo_evento='ACCESO_RECHAZADO', 
             resultado=f'DENEGADO ({sensor.estado})'
         )
-        # Error 403: Prohibido (por estado del sensor)
         return Response({
             "error": "Acceso Denegado",
             "codigo": 403,

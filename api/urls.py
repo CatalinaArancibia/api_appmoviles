@@ -26,7 +26,7 @@ router.register(r'eventos', EventoViewSet)
 router.register(r'comandos', ComandoRemotoViewSet)
 
 urlpatterns = [
-    # 1. Rutas para el Login (JWT) <-- ¡ESTO FALTABA!
+    # 1. Rutas para el Login (JWT)
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
